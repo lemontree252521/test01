@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>量子布洛赫球 · 交互式量子门</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a1a;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+      color: #fff;
+      user-select: none;
+      height: 100vh;
+    }
+    canvas { display: block; }
+
+    #hud {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(10,10,30,0.75); backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;
+      padding: 10px 28px; text-align: center; pointer-events: none; z-index: 10;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #hud h1 {
+      font-size: 18px; font-weight: 600; letter-spacing: 2px;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    #hud p { font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 1px; margin-top: 1px; }
+
+    #info {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      background: rgba(10,10,30,0.7); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+      padding: 10px 20px; display: flex; gap: 24px; font-size: 12px;
+      pointer-events: none; z-index: 10; font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    #info .label { color: rgba(255,255,255,0.3); }
+    #info .value { color: #fff; font-weight: 500; }
+    #info .segment { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+
+    #gate-panel {
+      position: fixed; right: 16px; top: 50%; transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 5px; z-index: 20;
+      pointer-events: none;
+    }
+    #gate-panel .section-label {
+      font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.2);
+      text-align: center; margin: 3px 0 1px; pointer-events: none;
+    }
+    .gate-btn {
+      pointer-events: auto; cursor: pointer; width: 42px; height: 34px;
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+      background: rgba(20,20,50,0.7); backdrop-filter: blur(6px);
+      color: #c8d8ff; font-size: 12px; font-weight: 600; font-family: inherit;
+      transition: all 0.12s; display: flex; align-items: center; justify-content: center;
+    }
+    .gate-btn:hover { background: rgba(60,80,180,0.5); border-color: rgba(100,150,255,0.4); color: #fff; }
+    .gate-btn:active { transform: scale(0.93); background: rgba(80,120,255,0.4); }
+    .gate-btn.special { border-color: rgba(255,200,80,0.15); color: #ffd866; }
+    .gate-btn.special:hover { border-color: rgba(255,200,80,0.4); background: rgba(120,100,40,0.4); }
+    .gate-btn.reset { border-color: rgba(255,80,80,0.15); color: #ff6666; }
+    .gate-btn.reset:hover { border-color: rgba(255,80,80,0.4); background: rgba(120,40,40,0.4); }
+
+    #rotation-panel {
+      position: fixed; left: 16px; top: 50%; transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 8px; z-index: 20;
+      pointer-events: none;
+    }
+    .rot-group {
+      pointer-events: auto; background: rgba(10,10,30,0.65); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.06); border-radius: 10px;
+      padding: 6px 10px; display: flex; flex-direction: column;
+      align-items: center; gap: 2px; min-width: 100px;
+    }
+    .rot-group .rot-label { font-size: 10px; font-weight: 600; letter-spacing: 1px; color: rgba(255,255,255,0.3); }
+    .rot-group .rot-value { font-size: 11px; color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums; }
+    .rot-group input[type="range"] {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+      border-radius: 2px; background: rgba(255,255,255,0.12); outline: none; cursor: pointer;
+    }
+    .rot-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+      background: #6688ff; border: 2px solid rgba(255,255,255,0.2); cursor: pointer;
+    }
+    .rot-group .apply-btn {
+      pointer-events: auto; cursor: pointer; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px; background: rgba(60,80,180,0.3); color: #aabbff;
+      font-size: 10px; font-weight: 600; padding: 2px 10px; font-family: inherit;
+      margin-top: 2px; transition: all 0.1s;
+    }
+    .rot-group .apply-btn:hover { background: rgba(60,80,180,0.5); color: #fff; }
+
+    #state-readout {
+      position: fixed; bottom: 128px; left: 50%; transform: translateX(-50%);
+      z-index: 10; pointer-events: none; text-align: center;
+    }
+    #state-readout .ket {
+      font-size: 14px; font-weight: 500; letter-spacing: 1px;
+      color: rgba(255,255,255,0.7); text-shadow: 0 0 30px rgba(0,0,0,0.9);
+      background: rgba(0,0,0,0.3); padding: 4px 16px; border-radius: 8px; backdrop-filter: blur(4px);
+    }
+    #state-readout .ket .alpha { color: #60f0a0; }
+    #state-readout .ket .beta  { color: #60a0f0; }
+    #state-readout .ket .plus  { color: rgba(255,255,255,0.3); }
+
+    #hint {
+      position: fixed; bottom: 62px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; color: rgba(255,255,255,0.15); letter-spacing: 1px;
+      z-index: 10; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="hud">
+    <h1>✦ 量子布洛赫球 · 交互式量子门</h1>
+    <p>拖动旋转 · 滚轮缩放 · 空格自动旋转</p>
+  </div>
+
+  <div id="state-readout">
+    <div class="ket" id="ket-display">
+      <span class="alpha">|ψ⟩ = cos(22.5°)|0⟩</span>
+      <span class="plus"> + </span>
+      <span class="beta">e^(i·30.0°)·sin(22.5°)|1⟩</span>
+    </div>
+  </div>
+
+  <div id="info">
+    <div class="segment"><span class="label">θ</span><span class="value" id="theta-val">45.0°</span></div>
+    <div class="segment"><span class="label">φ</span><span class="value" id="phi-val">30.0°</span></div>
+    <div class="segment"><span class="label">|α|²</span><span class="value" id="alpha2-val">0.8536</span></div>
+    <div class="segment"><span class="label">|β|²</span><span class="value" id="beta2-val">0.1464</span></div>
+  </div>
+
+  <div id="hint">━ 点击右侧量子门改变状态 ━</div>
+
+  <div id="gate-panel">
+    <div class="section-label">泡利</div>
+    <button class="gate-btn" data-gate="X">X</button>
+    <button class="gate-btn" data-gate="Y">Y</button>
+    <button class="gate-btn" data-gate="Z">Z</button>
+    <div class="section-label">克利福德</div>
+    <button class="gate-btn" data-gate="H">H</button>
+    <button class="gate-btn" data-gate="S">S</button>
+    <button class="gate-btn" data-gate="Sdg">S†</button>
+    <div class="section-label">T门</div>
+    <button class="gate-btn special" data-gate="T">T</button>
+    <button class="gate-btn special" data-gate="Tdg">T†</button>
+    <div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:4px;">
+      <button class="gate-btn reset" data-gate="RESET">↺</button>
+    </div>
+  </div>
+
+  <div id="rotation-panel">
+    <div class="rot-group">
+      <span class="rot-label">R<sub>x</sub></span>
+      <input type="range" id="rx-slider" min="0" max="360" value="90" />
+      <span class="rot-value" id="rx-val">90°</span>
+      <button class="apply-btn" id="rx-apply">应用</button>
+    </div>
+    <div class="rot-group">
+      <span class="rot-label">R<sub>y</sub></span>
+      <input type="range" id="ry-slider" min="0" max="360" value="90" />
+      <span class="rot-value" id="ry-val">90°</span>
+      <button class="apply-btn" id="ry-apply">应用</button>
+    </div>
+    <div class="rot-group">
+      <span class="rot-label">R<sub>z</sub></span>
+      <input type="range" id="rz-slider" min="0" max="360" value="90" />
+      <span class="rot-value" id="rz-val">90°</span>
+      <button class="apply-btn" id="rz-apply">应用</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ===================== 量子态引擎 =====================
+
+function c(re, im) { return { re, im }; }
+function mul(a, b) { return { re: a.re*b.re - a.im*b.im, im: a.re*b.im + a.im*b.re }; }
+function add(a, b) { return { re: a.re + b.re, im: a.im + b.im }; }
+
+class QState {
+  constructor() {
+    this.a = c(1, 0);
+    this.b = c(0, 0);
+  }
+
+  fromAngles(theta, phi) {
+    const h = theta / 2;
+    this.a = c(Math.cos(h), 0);
+    this.b = c(Math.sin(h) * Math.cos(phi), Math.sin(h) * Math.sin(phi));
+  }
+
+  toAngles() {
+    const aM2 = this.a.re*this.a.re + this.a.im*this.a.im;
+    const bM2 = this.b.re*this.b.re + this.b.im*this.b.im;
+    const total = aM2 + bM2;
+    if (total < 1e-30) return { theta: 0, phi: 0 };
+    const theta = Math.acos(Math.min(1, Math.max(-1, (aM2 - bM2) / total)));
+    const phi = Math.atan2(this.b.im, this.b.re) - Math.atan2(this.a.im, this.a.re);
+    return { theta, phi: ((phi % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) };
+  }
+
+  apply(gate) {
+    const [[p,q],[r,s]] = gate;
+    const na = add(mul(p, this.a), mul(q, this.b));
+    const nb = add(mul(r, this.a), mul(s, this.b));
+    this.a = na; this.b = nb;
+    this.normalize();
+  }
+
+  normalize() {
+    const n = Math.sqrt(this.a.re*this.a.re + this.a.im*this.a.im + this.b.re*this.b.re + this.b.im*this.b.im);
+    if (n < 1e-30) { this.a = c(1,0); this.b = c(0,0); return; }
+    this.a.re /= n; this.a.im /= n; this.b.re /= n; this.b.im /= n;
+    // 全局相位归零：旋转使 α 为实数非负
+    const ph = Math.atan2(this.a.im, this.a.re);
+    if (Math.abs(ph) > 1e-12) {
+      const ca = Math.cos(-ph), sa = Math.sin(-ph);
+      const ar=this.a.re, ai=this.a.im, br=this.b.re, bi=this.b.im;
+      this.a = c(ar*ca - ai*sa, ar*sa + ai*ca);
+      this.b = c(br*ca - bi*sa, br*sa + bi*ca);
+    }
+    // 钳除极小值
+    if (Math.abs(this.a.re) < 1e-14) this.a.re = 0;
+    if (Math.abs(this.a.im) < 1e-14) this.a.im = 0;
+    if (Math.abs(this.b.re) < 1e-14) this.b.re = 0;
+    if (Math.abs(this.b.im) < 1e-14) this.b.im = 0;
+  }
+
+  aMag2() { return this.a.re*this.a.re + this.a.im*this.a.im; }
+  bMag2() { return this.b.re*this.b.re + this.b.im*this.b.im; }
+}
+
+const GATES = {
+  X: [[c(0,0),c(1,0)],[c(1,0),c(0,0)]],
+  Y: [[c(0,0),c(0,-1)],[c(0,1),c(0,0)]],
+  Z: [[c(1,0),c(0,0)],[c(0,0),c(-1,0)]],
+  H: [[c(0.70710678,0),c(0.70710678,0)],[c(0.70710678,0),c(-0.70710678,0)]],
+  S: [[c(1,0),c(0,0)],[c(0,0),c(0,1)]],
+  Sdg:[[c(1,0),c(0,0)],[c(0,0),c(0,-1)]],
+  T: [[c(1,0),c(0,0)],[c(0,0),c(0.70710678,0.70710678)]],
+  Tdg:[[c(1,0),c(0,0)],[c(0,0),c(0.70710678,-0.70710678)]],
+};
+
+function RxGate(t) { const h=t/2; return [[c(Math.cos(h),0),c(0,-Math.sin(h))],[c(0,-Math.sin(h)),c(Math.cos(h),0)]]; }
+function RyGate(t) { const h=t/2; return [[c(Math.cos(h),0),c(-Math.sin(h),0)],[c(Math.sin(h),0),c(Math.cos(h),0)]]; }
+function RzGate(t) { const h=t/2; return [[c(Math.cos(h),-Math.sin(h)),c(0,0)],[c(0,0),c(Math.cos(h),Math.sin(h))]]; }
+
+// ===================== Three.js 场景 =====================
+
+const theta0 = Math.PI / 4;
+const phi0 = Math.PI / 6;
+
+const qs = new QState();
+qs.fromAngles(theta0, phi0);
+
+const R = 3;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a1a);
+
+const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(7, 4, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.body.prepend(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+document.body.prepend(labelRenderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 4;
+controls.maxDistance = 22;
+controls.target.set(0, 0, 0);
+
+// 灯光
+scene.add(new THREE.AmbientLight(0x404060));
+const dl = new THREE.DirectionalLight(0xffffff, 1.8);
+dl.position.set(10, 15, 10); scene.add(dl);
+const fl = new THREE.DirectionalLight(0x8888ff, 0.6);
+fl.position.set(-8, -4, -10); scene.add(fl);
+
+// 标签
+function makeLabel(text, color) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  d.style.color = color || '#fff';
+  d.style.fontSize = '16px';
+  d.style.fontWeight = '700';
+  d.style.fontFamily = 'Segoe UI, sans-serif';
+  d.style.textShadow = '0 0 20px rgba(0,0,0,0.8)';
+  d.style.background = 'rgba(0,0,0,0.3)';
+  d.style.padding = '2px 8px';
+  d.style.borderRadius = '4px';
+  return new CSS2DObject(d);
+}
+
+// 球体
+const sGeo = new THREE.SphereGeometry(R, 48, 36);
+const sMat = new THREE.MeshPhysicalMaterial({
+  color: 0x222255, transparent: true, opacity: 0.15,
+  roughness: 0.1, metalness: 0, side: THREE.DoubleSide, depthWrite: false,
+});
+scene.add(new THREE.Mesh(sGeo, sMat));
+const wfMat = new THREE.MeshBasicMaterial({ color: 0x4488ff, wireframe: true, transparent: true, opacity: 0.05 });
+scene.add(new THREE.Mesh(sGeo.clone(), wfMat));
+
+// 纬线
+function lat() {
+  const g = new THREE.Group();
+  const m = new THREE.LineBasicMaterial({ color: 0x4466aa, transparent: true, opacity: 0.1 });
+  for (let i = 1; i < 6; i++) {
+    const ph = (i/6)*Math.PI, y = R*Math.cos(ph), r = R*Math.sin(ph);
+    if (r < 0.01) continue;
+    const pts = [];
+    for (let j = 0; j <= 48; j++) { const t = (j/48)*Math.PI*2; pts.push(new THREE.Vector3(r*Math.cos(t), y, r*Math.sin(t))); }
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m));
+  }
+  return g;
+}
+scene.add(lat());
+
+// 经线
+function lon() {
+  const g = new THREE.Group();
+  const m = new THREE.LineBasicMaterial({ color: 0x4466aa, transparent: true, opacity: 0.1 });
+  for (let i = 0; i < 12; i++) {
+    const th = (i/12)*Math.PI;
+    const pts = [];
+    for (let j = 0; j <= 36; j++) {
+      const ph = (j/36)*Math.PI;
+      pts.push(new THREE.Vector3(R*Math.sin(ph)*Math.cos(th), R*Math.cos(ph), R*Math.sin(ph)*Math.sin(th)));
+    }
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m));
+  }
+  return g;
+}
+scene.add(lon());
+
+// 赤道
+const eqPts = [];
+for (let i = 0; i <= 64; i++) { const t = (i/64)*Math.PI*2; eqPts.push(new THREE.Vector3(R*Math.cos(t), 0, R*Math.sin(t))); }
+scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(eqPts),
+  new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.2 })));
+
+// 坐标轴
+function axis(dir, color, label) {
+  const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 });
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), dir.clone().multiplyScalar(R*1.5)]), m));
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 8), new THREE.MeshBasicMaterial({ color }));
+  const tip = dir.clone().multiplyScalar(R*1.5);
+  cone.position.copy(tip);
+  cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  scene.add(cone);
+  const lbl = makeLabel(label); lbl.position.copy(dir.clone().multiplyScalar(R*2.0)); scene.add(lbl);
+  // 负半轴
+  const dm = new THREE.LineDashedMaterial({ color, transparent: true, opacity: 0.1, dashSize: 0.05, gapSize: 0.05 });
+  const nl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), dir.clone().multiplyScalar(-R*1.3)]), dm);
+  nl.computeLineDistances(); scene.add(nl);
+  const nlbl = makeLabel(`-${label}`, 'rgba(255,255,255,0.15)');
+  nlbl.position.copy(dir.clone().multiplyScalar(-R*1.7)); scene.add(nlbl);
+}
+axis(new THREE.Vector3(1,0,0), 0xff4444, 'X');
+axis(new THREE.Vector3(0,1,0), 0x44ff44, 'Z');
+axis(new THREE.Vector3(0,0,1), 0x4488ff, 'Y');
+
+// |0⟩ |1⟩
+const p0 = makeLabel('|0⟩','#60f0a0'); p0.position.set(0,R*1.7,0); scene.add(p0);
+const p1 = makeLabel('|1⟩','#f060a0'); p1.position.set(0,-R*1.7,0); scene.add(p1);
+
+// 状态向量组
+const vecGroup = new THREE.Group();
+scene.add(vecGroup);
+
+// 光晕纹理
+function makeGlowTex() {
+  const c = document.createElement('canvas'); c.width=128; c.height=128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'rgba(255,255,200,1)');
+  g.addColorStop(0.2,'rgba(255,255,100,0.5)');
+  g.addColorStop(0.5,'rgba(255,200,50,0.1)');
+  g.addColorStop(1,'rgba(255,200,50,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+const glowTex = makeGlowTex();
+
+function buildVector(theta, phi) {
+  while (vecGroup.children.length) vecGroup.remove(vecGroup.children[0]);
+
+  const dir = new THREE.Vector3(
+    Math.sin(theta)*Math.cos(phi),
+    Math.cos(theta),
+    Math.sin(theta)*Math.sin(phi),
+  );
+  if (dir.length() < 0.001) dir.set(0,1,0);
+  const d = dir.clone().normalize();
+  const len = R * 0.92;
+
+  // 箭头
+  vecGroup.add(new THREE.ArrowHelper(d, new THREE.Vector3(0,0,0), len, 0xffff44, 0.3, 0.14));
+
+  // 发光柱
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,len,6),
+    new THREE.MeshBasicMaterial({ color: 0xffff44, transparent: true, opacity: 0.05 }));
+  tube.position.copy(d.clone().multiplyScalar(len/2));
+  tube.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d);
+  vecGroup.add(tube);
+
+  // 赤道投影
+  const proj = new THREE.Vector3(d.x, 0, d.z);
+  if (proj.length() > 0.01) {
+    proj.normalize();
+    const plen = R * Math.sin(theta);
+    const pm = new THREE.LineDashedMaterial({ color: 0x44ddff, transparent: true, opacity: 0.2, dashSize:0.04, gapSize:0.04 });
+    const pl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), proj.clone().multiplyScalar(plen)]), pm);
+    pl.computeLineDistances(); vecGroup.add(pl);
+    // 竖线
+    const tip = d.clone().multiplyScalar(len);
+    const pp = proj.clone().multiplyScalar(plen);
+    const vm = new THREE.LineDashedMaterial({ color: 0x44ddff, transparent: true, opacity: 0.1, dashSize:0.03, gapSize:0.03 });
+    const vl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([tip, new THREE.Vector3(pp.x,0,pp.z)]), vm);
+    vl.computeLineDistances(); vecGroup.add(vl);
+  }
+
+  // 轨道环
+  const rr = R*Math.sin(theta), ry = R*Math.cos(theta);
+  if (rr > 0.02) {
+    const rp = [];
+    for (let i=0;i<=48;i++) { const a=(i/48)*Math.PI*2; rp.push(new THREE.Vector3(rr*Math.cos(a), ry, rr*Math.sin(a))); }
+    vecGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rp),
+      new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.07 })));
+  }
+
+  // 端点发光球
+  const pt = new THREE.Mesh(new THREE.SphereGeometry(0.1,16,16),
+    new THREE.MeshPhysicalMaterial({ color:0xffff44, emissive:0xffff44, emissiveIntensity:2, roughness:0, metalness:0 }));
+  pt.position.copy(d.clone().multiplyScalar(len));
+  vecGroup.add(pt);
+
+  // 光晕
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map:glowTex, blending:THREE.AdditiveBlending, transparent:true, opacity:0.4, color:0xffff44, depthWrite:false }));
+  halo.position.copy(pt.position);
+  halo.scale.set(0.6,0.6,1);
+  vecGroup.add(halo);
+}
+
+buildVector(theta0, phi0);
+
+// 粒子
+const pCount = 150;
+const pPos = new Float32Array(pCount*3);
+const pCol = new Float32Array(pCount*3);
+for (let i=0; i<pCount; i++) {
+  const r = R*(0.8+Math.random()*0.4);
+  const t = Math.random()*Math.PI, p = Math.random()*Math.PI*2;
+  pPos[i*3]=r*Math.sin(t)*Math.cos(p); pPos[i*3+1]=r*Math.cos(t); pPos[i*3+2]=r*Math.sin(t)*Math.sin(p);
+  const c = new THREE.Color().setHSL(0.6+Math.random()*0.2,0.8,0.4+Math.random()*0.3);
+  pCol[i*3]=c.r; pCol[i*3+1]=c.g; pCol[i*3+2]=c.b;
+}
+const pg = new THREE.BufferGeometry();
+pg.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+pg.setAttribute('color', new THREE.BufferAttribute(pCol,3));
+const pm = new THREE.PointsMaterial({ size:0.03, vertexColors:true, transparent:true, opacity:0.3, blending:THREE.AdditiveBlending, depthWrite:false, sizeAttenuation:true });
+const particles = new THREE.Points(pg, pm);
+scene.add(particles);
+
+// 星空
+const sCount = 1500;
+const sPos = new Float32Array(sCount*3);
+const sCol = new Float32Array(sCount*3);
+for (let i=0; i<sCount; i++) {
+  const r=30+Math.random()*70, t=Math.random()*Math.PI*2, p=Math.acos(2*Math.random()-1);
+  sPos[i*3]=r*Math.sin(p)*Math.cos(t); sPos[i*3+1]=r*Math.cos(p); sPos[i*3+2]=r*Math.sin(p)*Math.sin(t);
+  const c=0.3+Math.random()*0.7;
+  sCol[i*3]=c; sCol[i*3+1]=c; sCol[i*3+2]=c;
+}
+const sg = new THREE.BufferGeometry();
+sg.setAttribute('position', new THREE.BufferAttribute(sPos,3));
+sg.setAttribute('color', new THREE.BufferAttribute(sCol,3));
+const sm = new THREE.PointsMaterial({ size:0.1, vertexColors:true, transparent:true, opacity:0.4, sizeAttenuation:true, blending:THREE.AdditiveBlending, depthWrite:false });
+scene.add(new THREE.Points(sg, sm));
+
+// ===================== 更新函数 =====================
+
+function updateAll() {
+  const { theta, phi } = qs.toAngles();
+  buildVector(theta, phi);
+  updateHUD(theta, phi);
+}
+
+function updateHUD(theta, phi) {
+  const td = theta*180/Math.PI, pd = phi*180/Math.PI;
+  document.getElementById('theta-val').textContent = td.toFixed(1) + '°';
+  document.getElementById('phi-val').textContent = pd.toFixed(1) + '°';
+  document.getElementById('alpha2-val').textContent = qs.aMag2().toFixed(4);
+  document.getElementById('beta2-val').textContent = qs.bMag2().toFixed(4);
+  const half = (theta/2*180/Math.PI).toFixed(1);
+  document.getElementById('ket-display').innerHTML =
+    `<span class="alpha">|ψ⟩ = cos(${half}°)|0⟩</span><span class="plus"> + </span><span class="beta">e^(i·${pd.toFixed(1)}°)·sin(${half}°)|1⟩</span>`;
+}
+
+// ===================== 量子门应用 =====================
+
+function applyGate(name) {
+  if (name === 'RESET') { qs.a = c(1,0); qs.b = c(0,0); }
+  else { const g = GATES[name]; if (g) qs.apply(g); }
+  updateAll();
+}
+
+function applyRot(axis, deg) {
+  const rad = deg * Math.PI / 180;
+  let g;
+  if (axis === 'x') g = RxGate(rad);
+  else if (axis === 'y') g = RyGate(rad);
+  else g = RzGate(rad);
+  qs.apply(g);
+  updateAll();
+}
+
+// ===================== UI 绑定 =====================
+
+document.querySelectorAll('.gate-btn').forEach(btn => {
+  btn.addEventListener('click', () => { applyGate(btn.dataset.gate); });
+});
+
+function setupSlider(sid, vid, axis) {
+  const sl = document.getElementById(sid), va = document.getElementById(vid);
+  const btn = document.getElementById(axis + '-apply');
+  sl.addEventListener('input', () => { va.textContent = sl.value + '°'; });
+  btn.addEventListener('click', () => { applyRot(axis, parseFloat(sl.value)); });
+}
+setupSlider('rx-slider','rx-val','x');
+setupSlider('ry-slider','ry-val','y');
+setupSlider('rz-slider','rz-val','z');
+
+// ===================== 动画 =====================
+
+let time = 0;
+let autoAngle = phi0;
+let autoEnabled = true;
+
+function animate() {
+  requestAnimationFrame(animate);
+  time += 0.01;
+
+  if (autoEnabled && !controls.isDragging) {
+    autoAngle += 0.002;
+    const tv = theta0 + Math.sin(time * 0.3) * 0.1;
+    qs.fromAngles(tv, autoAngle);
+    buildVector(tv, autoAngle);
+    updateHUD(tv, autoAngle);
+  }
+
+  particles.rotation.y += 0.0004;
+  particles.rotation.x = Math.sin(time * 0.04) * 0.015;
+
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+
+animate();
+
+// ===================== 事件 =====================
+
+window.addEventListener('resize', () => {
+  const w=window.innerWidth, h=window.innerHeight;
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); labelRenderer.setSize(w,h);
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === ' ') { e.preventDefault(); autoEnabled = !autoEnabled; }
+});
+
+// 初始HUD
+updateHUD(theta0, phi0);
+  </script>
+</body>
+</html>
